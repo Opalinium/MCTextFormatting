@@ -1,0 +1,5 @@
+name: MCTextFormatting
+version: '${project.version}'
+main: me.randomgamingdev.mctextformatting.MCTextFormatting
+api-version: 1.19
+description: A basic plugin for Minecraft Text formatting in things like chat, signs, books, and anvils
