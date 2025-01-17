@@ -4,62 +4,70 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 
-import java.util.LinkedList;
-
 public class ChatListener implements Listener {
-    MCTextFormatting plugin;
 
-    ChatListener(MCTextFormatting plugin) {
-        this.plugin = plugin;
+    public ChatListener(MCTextFormatting plugin) {
     }
 
-    public static String IndRep(String str, String rep, int pos, int len) {
-        return str.substring(0, pos) + rep + str.substring(pos + len);
+    private static String replaceSubstring(String original, String replacement, int position, int length) {
+        return original.substring(0, position) + replacement + original.substring(position + length);
     }
 
     @EventHandler
-    public void onAsyncPlayerChatEvent(AsyncPlayerChatEvent event) {
+    public void onAsyncPlayerChat(AsyncPlayerChatEvent event) {
         String msg = event.getMessage();
-        final String[] formatters = new String[]{ "**", "*", "__", "~~", "##" };
-        final String[] replacements = new String[]{ "§l", "§o", "§n", "§m", "§k" };
-        boolean[] last = new boolean[]{ false, false, false, false, false };
+
+        final String[] formatters = { "**", "*", "__", "~~", "##" };
+        final String[] replacements = { "§l", "§o", "§n", "§m", "§k" };
+
+        boolean[] active = { false, false, false, false, false };
+
         for (int i = 0; i < msg.length(); i++) {
-            final char character = msg.charAt(i);
-            if (character == '\\') {
-                msg = IndRep(msg, "", i, 1);
+            char c = msg.charAt(i);
+
+            if (c == '\\') {
+                msg = replaceSubstring(msg, "", i, 1);
+                i--;
                 continue;
             }
 
-            if (character == '&') {
-                msg = IndRep(msg, "§", i, 1);
+            if (c == '&') {
+                msg = replaceSubstring(msg, "§", i, 1);
                 continue;
             }
 
             for (int j = 0; j < formatters.length; j++) {
-                final String formatter = formatters[j];
-                final String replacement = replacements[j];
+                String formatter = formatters[j];
+                String replacement = replacements[j];
 
-                if (msg.length() - formatter.length() < i)
+                if (i + formatter.length() > msg.length()) {
                     continue;
-                if (!msg.startsWith(formatter, i))
-                    continue;
-
-                if (last[j] == true) {
-                    last[j] = false;
-                    String resetStr = "§r";
-                    for (int k = 0; k < last.length; k++)
-                        if (last[k])
-                            resetStr += replacements[k];
-                    msg = IndRep(msg, resetStr, i, formatter.length());
-                    break;
                 }
 
-                last[j] = true;
-                msg = IndRep(msg, replacement, i, formatter.length());
-                i += formatter.length() - 1;
+                if (!msg.startsWith(formatter, i)) {
+                    continue;
+                }
+
+                if (active[j]) {
+                    active[j] = false;
+
+                    StringBuilder resetBuilder = new StringBuilder("§r");
+                    for (int k = 0; k < active.length; k++) {
+                        if (active[k]) {
+                            resetBuilder.append(replacements[k]);
+                        }
+                    }
+                    msg = replaceSubstring(msg, resetBuilder.toString(), i, formatter.length());
+
+                } else {
+                    active[j] = true;
+                    msg = replaceSubstring(msg, replacement, i, formatter.length());
+                    i += formatter.length() - 1;
+                }
                 break;
             }
         }
+
         event.setMessage(msg);
     }
 }

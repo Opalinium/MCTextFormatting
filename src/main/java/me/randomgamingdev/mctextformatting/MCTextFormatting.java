@@ -6,7 +6,7 @@ public final class MCTextFormatting extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        System.out.println("MCTextFormatting is shutting down!");
+        System.out.println("MCTextFormatting initialized");
         this.getServer().getPluginManager().registerEvents(new ChatListener(this), this);
     }
 
