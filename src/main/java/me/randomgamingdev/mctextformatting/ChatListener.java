@@ -4,70 +4,140 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 
+import java.util.Stack;
+
 public class ChatListener implements Listener {
 
     public ChatListener(MCTextFormatting plugin) {
     }
 
-    private static String replaceSubstring(String original, String replacement, int position, int length) {
-        return original.substring(0, position) + replacement + original.substring(position + length);
+    private static class OpenMarker {
+        int markerIndex;
+        int position;
+        OpenMarker(int markerIndex, int position) {
+            this.markerIndex = markerIndex;
+            this.position = position;
+        }
     }
 
     @EventHandler
     public void onAsyncPlayerChat(AsyncPlayerChatEvent event) {
-        String msg = event.getMessage();
+        String originalMessage = event.getMessage();
 
-        final String[] formatters = { "**", "*", "__", "~~", "##" };
-        final String[] replacements = { "§l", "§o", "§n", "§m", "§k" };
+        if (originalMessage.trim().isEmpty()) {
+            return;
+        }
 
-        boolean[] active = { false, false, false, false, false };
+        String strippedFormatting = originalMessage.replaceAll("[*_~#]", "");
+        if (strippedFormatting.trim().isEmpty()) {
+            event.setMessage(originalMessage);
+            return;
+        }
 
-        for (int i = 0; i < msg.length(); i++) {
-            char c = msg.charAt(i);
+        final String[] formatters = { "**", "__", "~~", "##", "*", "_", "~", "#" };
+        final String[] replacements = { "§l", "§n", "§m", "§k", "§o", "§n", "§m", "§k" };
 
-            if (c == '\\') {
-                msg = replaceSubstring(msg, "", i, 1);
-                i--;
-                continue;
-            }
+        final String[] placeholders = {
+                "[ESCAPED_DOUBLE_ASTERISK]",
+                "[ESCAPED_DOUBLE_UNDERSCORE]",
+                "[ESCAPED_DOUBLE_TILDE]",
+                "[ESCAPED_DOUBLE_HASH]",
+                "[ESCAPED_SINGLE_ASTERISK]",
+                "[ESCAPED_SINGLE_UNDERSCORE]",
+                "[ESCAPED_SINGLE_TILDE]",
+                "[ESCAPED_SINGLE_HASH]"
+        };
 
-            if (c == '&') {
-                msg = replaceSubstring(msg, "§", i, 1);
-                continue;
-            }
+        String msg = originalMessage.replace("&", "§");
+        for (int f = 0; f < formatters.length; f++) {
+            String escaped = "\\" + formatters[f];
+            msg = msg.replace(escaped, placeholders[f]);
+        }
 
-            for (int j = 0; j < formatters.length; j++) {
-                String formatter = formatters[j];
-                String replacement = replacements[j];
+        StringBuilder output = new StringBuilder();
+        Stack<Integer> markerStack = new Stack<>();
+        int i = 0;
 
-                if (i + formatter.length() > msg.length()) {
-                    continue;
-                }
+        while (i < msg.length()) {
+            boolean matchedMarker = false;
 
-                if (!msg.startsWith(formatter, i)) {
-                    continue;
-                }
-
-                if (active[j]) {
-                    active[j] = false;
-
-                    StringBuilder resetBuilder = new StringBuilder("§r");
-                    for (int k = 0; k < active.length; k++) {
-                        if (active[k]) {
-                            resetBuilder.append(replacements[k]);
+            for (int f = 0; f < formatters.length; f++) {
+                String formatter = formatters[f];
+                int fl = formatter.length();
+                if (i + fl > msg.length()) continue;
+                if (msg.substring(i, i + fl).equals(formatter)) {
+                    if (!markerStack.isEmpty() && markerStack.peek() == f) {
+                        markerStack.pop();
+                        output.append("§r");
+                        for (int m : markerStack) {
+                            output.append(replacements[m]);
                         }
+                    } else {
+                        markerStack.push(f);
+                        output.append(replacements[f]);
                     }
-                    msg = replaceSubstring(msg, resetBuilder.toString(), i, formatter.length());
-
-                } else {
-                    active[j] = true;
-                    msg = replaceSubstring(msg, replacement, i, formatter.length());
-                    i += formatter.length() - 1;
+                    i += fl;
+                    matchedMarker = true;
+                    break;
                 }
-                break;
+            }
+            if (matchedMarker) continue;
+
+            boolean handledPlaceholder = false;
+            for (int p = 0; p < placeholders.length; p++) {
+                String placeholder = placeholders[p];
+                if (msg.startsWith(placeholder, i)) {
+
+                    output.append(formatters[p]);
+                    i += placeholder.length();
+
+                    while(i < msg.length()) {
+                        if(msg.startsWith(formatters[p], i)) {
+                            output.append(formatters[p]);
+                            i += formatters[p].length();
+                            break;
+                        }
+                        boolean nestedFound = false;
+                        for(int q = 0; q < placeholders.length; q++) {
+                            String ph = placeholders[q];
+                            if(msg.startsWith(ph, i)) {
+                                output.append(formatters[q]);
+                                i += ph.length();
+                                nestedFound = true;
+                                break;
+                            }
+                        }
+                        if(nestedFound) continue;
+                        output.append(msg.charAt(i));
+                        i++;
+                    }
+                    handledPlaceholder = true;
+                    break;
+                }
+            }
+            if(handledPlaceholder) continue;
+
+            output.append(msg.charAt(i));
+            i++;
+        }
+
+        while (!markerStack.isEmpty()) {
+            int markerIdx = markerStack.pop();
+            String replacement = replacements[markerIdx];
+            String formatter = formatters[markerIdx];
+            int last = output.lastIndexOf(replacement);
+            if (last != -1) {
+                output.replace(last, last + replacement.length(), formatter);
             }
         }
 
-        event.setMessage(msg);
+        String finalMessage = output.toString();
+
+        String visible = finalMessage.replaceAll("§[0-9a-fk-or]", "").trim();
+        if (visible.isEmpty()) {
+            event.setMessage(originalMessage);
+        } else {
+            event.setMessage(finalMessage);
+        }
     }
 }
